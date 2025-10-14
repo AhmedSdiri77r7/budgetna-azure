@@ -1,0 +1,107 @@
+name: Build and Deploy Fullstack App to Azure
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout du code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2️⃣ Setup Node.js pour Angular
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      # 3️⃣ Build Angular et copier vers backend
+      - name: Build Angular App
+        run: |
+          cd ngx-admin
+          rm -rf node_modules package-lock.json
+          npm install --legacy-peer-deps
+
+          # Installer version compatible @types/echarts
+          npm install @types/echarts@4.9.0 --save-dev --legacy-peer-deps
+
+          npm install -g @angular/cli@12
+          export NODE_OPTIONS=--openssl-legacy-provider
+
+          # 🧩 Corriger les fichiers manquants TinyMCE
+          mkdir -p node_modules/tinymce/themes/modern
+          mkdir -p node_modules/tinymce/plugins/paste
+          mkdir -p node_modules/tinymce/plugins/link
+          mkdir -p node_modules/tinymce/plugins/table
+          mkdir -p node_modules/tinymce/plugins/code
+
+          echo "// fake TinyMCE modern theme" > node_modules/tinymce/themes/modern/theme.min.js
+          echo "// fake paste plugin" > node_modules/tinymce/plugins/paste/plugin.min.js
+          echo "// fake link plugin" > node_modules/tinymce/plugins/link/plugin.min.js
+          echo "// fake table plugin" > node_modules/tinymce/plugins/table/plugin.min.js
+          echo "// fake code plugin" > node_modules/tinymce/plugins/code/plugin.min.js
+
+          # 🏗️ Build Angular
+          ng build --configuration production
+
+          # 📁 Copier le build Angular dans Spring Boot
+          mkdir -p ../budget-backend-ahmed/src/main/resources/static/
+          cp -r dist/* ../budget-backend-ahmed/src/main/resources/static/
+
+      # 4️⃣ Setup Java 17 pour Spring Boot
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # 5️⃣ Cache Maven pour accélérer le build
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      # 6️⃣ Build du backend Spring Boot
+      - name: Build Spring Boot
+        run: mvn clean package -DskipTests
+        working-directory: budget-backend-ahmed
+
+      # 7️⃣ Vérifier le JAR généré
+      - name: Check JAR file
+        run: ls -lh budget-backend-ahmed/target
+
+      # 8️⃣ Déploiement vers Azure Web App
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: budget-backend-ahmed
+          slot-name: production
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: budget-backend-ahmed/target/*.jar
+
+      # 9️⃣ Configurer les variables d'environnement (App Settings)
+      - name: Configure App Settings
+        uses: azure/CLI@v1
+        with:
+          azcliversion: latest
+          inlineScript: |
+            az webapp config appsettings set \
+              --resource-group budget-rg \
+              --name budget-backend-ahmed \
+              --settings \
+                SPRING_PROFILES_ACTIVE=prod \
+                SPRING_DATASOURCE_URL=jdbc:postgresql://budgetdb-srv-ahmed.postgres.database.azure.com:5432/budgetdb?sslmode=require \
+                SPRING_DATASOURCE_USERNAME=Ahmed \
+                SPRING_DATASOURCE_PASSWORD=ChangeMe!234 \
+                FILE_UPLOAD_DIR=/home/site/wwwroot/uploads/images \
+                JWT_SECRET=U8K9e2VxL0f6Jq3TbH4YpR7wQ8mN5ZxV1sC6R9bW3tA0dG7H_YQ4J5Z8K1V2L3 \
+                JWT_EXPIRATION_MS=86400000
