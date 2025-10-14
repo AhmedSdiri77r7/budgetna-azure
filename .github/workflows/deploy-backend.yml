@@ -48,6 +48,11 @@ jobs:
           echo "// fake table plugin" > node_modules/tinymce/plugins/table/plugin.min.js
           echo "// fake code plugin" > node_modules/tinymce/plugins/code/plugin.min.js
 
+          # 🛠️ Contournement dépréciation SCSS slash-div
+          # Remplacer toutes les divisions `x / y` par `math.div(x, y)` dans les fichiers Nebular
+          find node_modules/@nebular/theme -type f -name '*.scss' -exec \
+          sed -i 's|\([0-9]\+\)\s*/\s*\([0-9]\+\)|math.div(\1, \2)|g' {} +
+
           # 🏗️ Build Angular
           ng build --configuration production
 
