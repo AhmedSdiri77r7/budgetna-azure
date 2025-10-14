@@ -15,7 +15,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 2️⃣ Setup Node.js pour Angular
+      # 2️⃣ Setup Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
@@ -28,9 +28,10 @@ jobs:
           rm -rf node_modules package-lock.json
           npm install --legacy-peer-deps
 
-          # Installer version compatible @types/echarts
+          # Installer la version compatible @types/echarts pour Angular 12
           npm install @types/echarts@4.9.0 --save-dev --legacy-peer-deps
 
+          # Installer Angular CLI compatible
           npm install -g @angular/cli@12
           export NODE_OPTIONS=--openssl-legacy-provider
 
@@ -50,7 +51,7 @@ jobs:
           # 🏗️ Build Angular
           ng build --configuration production
 
-          # 📁 Copier le build Angular dans Spring Boot
+          # 📁 Copier le build vers Spring Boot
           mkdir -p ../budget-backend-ahmed/src/main/resources/static/
           cp -r dist/* ../budget-backend-ahmed/src/main/resources/static/
 
@@ -70,7 +71,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      # 6️⃣ Build du backend Spring Boot
+      # 6️⃣ Build Spring Boot
       - name: Build Spring Boot
         run: mvn clean package -DskipTests
         working-directory: budget-backend-ahmed
@@ -83,7 +84,7 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
-          app-name: budget-backend-ahmed
+          app-name: ${{ secrets.AZURE_APP_NAME }}
           slot-name: production
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: budget-backend-ahmed/target/*.jar
@@ -95,13 +96,13 @@ jobs:
           azcliversion: latest
           inlineScript: |
             az webapp config appsettings set \
-              --resource-group budget-rg \
-              --name budget-backend-ahmed \
+              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+              --name ${{ secrets.AZURE_APP_NAME }} \
               --settings \
                 SPRING_PROFILES_ACTIVE=prod \
-                SPRING_DATASOURCE_URL=jdbc:postgresql://budgetdb-srv-ahmed.postgres.database.azure.com:5432/budgetdb?sslmode=require \
-                SPRING_DATASOURCE_USERNAME=Ahmed \
-                SPRING_DATASOURCE_PASSWORD=ChangeMe!234 \
+                SPRING_DATASOURCE_URL=${{ secrets.DB_URL }} \
+                SPRING_DATASOURCE_USERNAME=${{ secrets.DB_USERNAME }} \
+                SPRING_DATASOURCE_PASSWORD=${{ secrets.DB_PASSWORD }} \
                 FILE_UPLOAD_DIR=/home/site/wwwroot/uploads/images \
-                JWT_SECRET=U8K9e2VxL0f6Jq3TbH4YpR7wQ8mN5ZxV1sC6R9bW3tA0dG7H_YQ4J5Z8K1V2L3 \
+                JWT_SECRET=${{ secrets.JWT_SECRET }} \
                 JWT_EXPIRATION_MS=86400000
